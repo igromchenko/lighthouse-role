@@ -1,0 +1,35 @@
+---
+- name: Install required packages
+  become: true
+  ansible.builtin.yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: true
+  with_items:
+    - epel-release
+    - nginx
+    - git
+- name: Get Lighthouse src-files from github.com
+  ansible.builtin.git:
+    repo: 'https://github.com/VKCOM/lighthouse.git'
+    dest: lighthouse
+    version: 'master'
+  register: get_src
+- name: Copy Lighthouse src-files to Nginx directory
+  become: true
+  ansible.builtin.copy:
+    src: lighthouse/
+    dest: /usr/share/nginx/html
+    mode: u=rwX,g=rX,o=rX
+    remote_src: true
+  when: get_src.changed
+- name: Set Clickhouse URL as default hash for Lighthouse
+  become: true
+  ansible.builtin.replace:
+    path: /usr/share/nginx/html/app.js
+    regexp: "db_host = prompt\\('Host:', 'http:\/\/127.0.0.1:8123\/'\\);"
+    replace: "db_host = 'http://{{ clickhouse_host }}:8123/';"
+  notify: Start nginx service
+- name: Print Lighthouse URL
+  debug:
+    msg: "Lighthouse is available via http://{{ hostvars['lighthouse'].ansible_host }}"
